@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/nodemailer": "^6.4.17",
+    "axios": "^1.7.9",
+    "lucide-react": "^0.469.0",
+    "mongodb": "^6.12.0"
+  }
+}
