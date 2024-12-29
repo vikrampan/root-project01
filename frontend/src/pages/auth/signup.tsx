@@ -5,15 +5,13 @@ import { Eye, EyeOff } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import axios from 'axios';
 
-declare global {
-  interface Window {
-    grecaptcha: {
-      ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
-      render: (element: string | HTMLElement, options: any) => void;
-    };
-  }
+// Define ReCaptcha interface outside global declaration
+interface ReCaptcha {
+  ready: (callback: () => void) => void;
+  execute: (siteKey: string, options: { action: string }) => Promise<string>;
+  render: (element: string | HTMLElement, options: any) => void;
 }
+
 
 export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);

@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import {
   Settings2, FileSpreadsheet, ChevronDown, Bell, User,
   Settings, LogOut, LineChart, HelpCircle, Lock,
-  FileText, Box, Cube, Eye, Construction, ChevronLeft
+  FileText, Box, Package, Eye, Construction, ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import General from '@/components/dashboard/General';
@@ -55,7 +55,7 @@ export default function Dashboard() {
     main: [
       { id: 'Reporting', icon: FileText, label: 'Reporting', color: 'text-[#FFC857]' },
       { id: 'Tubesheet', icon: Box, label: 'Tubesheet', color: 'text-[#FFC857]' },
-      { id: '3D Model', icon: Cube, label: '3D Model', color: 'text-[#FFC857]' },
+      { id: '3D Model', icon: Package, label: '3D Model', color: 'text-[#FFC857]' },
       {
         id: 'Inspection',
         icon: Eye,
@@ -114,7 +114,7 @@ export default function Dashboard() {
     await signOut({ callbackUrl: '/auth/signin' });
   };
 
-  const renderMenuItem = (item, isSubItem = false) => {
+  const renderMenuItem = (item: any, isSubItem = false) => {
     const isActive = activeSection === item.id || activeSubSection === item.id;
     const paddingLeft = isSubItem ? 'pl-8' : 'pl-4';
 
@@ -169,7 +169,7 @@ export default function Dashboard() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                {item.subItems.map(subItem => renderMenuItem(subItem, true))}
+                {item.subItems.map((subItem: any) => renderMenuItem(subItem, true))}
               </motion.ul>
             )}
           </AnimatePresence>
@@ -314,7 +314,6 @@ export default function Dashboard() {
             <ChevronLeft className={`w-5 h-5 text-[#E0E0E0] transform transition-transform ${isNavCollapsed ? 'rotate-180' : ''}`} />
           </button>
         </div>
-
         <div className="px-2 py-6 h-[calc(100vh-4rem)] overflow-y-auto">
           <ul className="space-y-2">
             {menuItems.main.map(item => renderMenuItem(item))}
@@ -347,7 +346,8 @@ export default function Dashboard() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center gap-2 p-2 text-[#9A9A9A] hover:bg-[#282828] rounded-lg transition-all duration-200 hover:text-[#E0E0E0E0E0]">
+                className="flex items-center gap-2 p-2 text-[#9A9A9A] hover:bg-[#282828] rounded-lg transition-all duration-200 hover:text-[#E0E0E0]"
+              >
                 {session?.user?.image ? (
                   <img src={session.user.image} alt="Profile" className="w-8 h-8 rounded-full ring-2 ring-[#282828] group-hover:ring-[#FFC857]" />
                 ) : (
