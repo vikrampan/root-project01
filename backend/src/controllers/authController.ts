@@ -1,84 +1,57 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import axios from 'axios';
 import nodemailer from 'nodemailer';
 import User from '../models/User';
 import { generateOTP, storeOTP, verifyOTP } from '../utils/otpUtil';
+import { sendEmail } from '../utils/emailConfig';
 
-// Type definitions
-interface UserDocument {
-  _id: string;
-  email: string;
-  password: string;
-  verified: boolean;
-  comparePassword: (password: string) => Promise<boolean>;
-}
-
-// Environment variables validation
-const requiredEnvVars = [
-  'JWT_SECRET',
-  'RECAPTCHA_SECRET_KEY',
-  'EMAIL_USER',
-  'EMAIL_PASS',
-  'EMAIL_SERVICE'
-];
-
-requiredEnvVars.forEach(varName => {
-  if (!process.env[varName]) {
-    throw new Error(`Missing required environment variable: ${varName}`);
-  }
-});
-
-// Constants
-const JWT_SECRET = process.env.JWT_SECRET!;
-const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY!;
-
-// Nodemailer configuration
-const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-// Verify transporter connection
-transporter.verify((error) => {
-  if (error) {
-    console.error('SMTP connection error:', error);
-  } else {
-    console.log('SMTP server is ready to send emails');
-  }
-});
-
-// reCAPTCHA verification
-const verifyRecaptcha = async (token: string): Promise<boolean> => {
+export const sendOTP = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const response = await axios.post(
-      'https://www.google.com/recaptcha/api/siteverify',
-      null,
-      {
-        params: {
-          secret: RECAPTCHA_SECRET_KEY,
-          response: token,
-        },
-      }
-    );
-    return response.data.success;
-  } catch (error) {
-    console.error('reCAPTCHA verification error:', error);
-    return false;
-  }
-};
+    const { email, password } = req.body;
 
-// Send email with OTP
-const sendOTPEmail = async (email: string, otp: string): Promise<void> => {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'Your OTP for RAST signup',
-    html: `
+    // Input validation
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required',
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format',
+      });
+    }
+
+    // Validate password
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters, include uppercase, lowercase, number, and special character',
+      });
+    }
+
+    // Check existing user
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered',
+      });
+    }
+
+    // Generate and store OTP
+    const otp = generateOTP();
+    await storeOTP(email, otp);
+
+    // Send OTP email
+    const emailSubject = 'Your OTP for RAST Signup';
+    const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #2d3748; text-align: center;">Welcome to RAST</h2>
         <div style="background-color: #f7fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -92,36 +65,32 @@ const sendOTPEmail = async (email: string, otp: string): Promise<void> => {
           If you didn't request this OTP, please ignore this email.
         </p>
       </div>
-    `,
-  };
+    `;
 
-  try {
-    await transporter.sendMail(mailOptions);
+    await sendEmail(email, emailSubject, emailHtml);
+
+    return res.json({
+      success: true,
+      message: 'OTP sent successfully',
+    });
   } catch (error) {
-    console.error('Email send error:', error);
-    throw new Error('Failed to send OTP email');
+    console.error('Send OTP error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP',
+    });
   }
 };
 
-// Controllers
-export const signup = async (req: Request, res: Response): Promise<Response> => {
+export const verifySignup = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { email, password, otp, recaptchaToken } = req.body;
+    const { email, password, otp } = req.body;
 
     // Input validation
-    if (!email || !password || !otp || !recaptchaToken) {
+    if (!email || !password || !otp) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required',
-      });
-    }
-
-    // Verify reCAPTCHA
-    const isRecaptchaValid = await verifyRecaptcha(recaptchaToken);
-    if (!isRecaptchaValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'reCAPTCHA verification failed',
       });
     }
 
@@ -134,7 +103,7 @@ export const signup = async (req: Request, res: Response): Promise<Response> => 
       });
     }
 
-    // Check existing user
+    // Check existing user (again, for additional safety)
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -146,7 +115,7 @@ export const signup = async (req: Request, res: Response): Promise<Response> => 
     // Create new user
     const user = new User({
       email,
-      password, // Will be hashed by the User model pre-save hook
+      password,
       verified: true,
     });
     await user.save();
@@ -154,7 +123,7 @@ export const signup = async (req: Request, res: Response): Promise<Response> => 
     // Generate JWT
     const token = jwt.sign(
       { userId: user._id },
-      JWT_SECRET,
+      process.env.JWT_SECRET || '4360',
       { expiresIn: '24h' }
     );
 
@@ -168,32 +137,23 @@ export const signup = async (req: Request, res: Response): Promise<Response> => 
       },
     });
   } catch (error) {
-    console.error('Signup error:', error);
+    console.error('Signup verification error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Server error during signup',
+      message: 'Server error during signup verification',
     });
   }
 };
 
 export const login = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { email, password, recaptchaToken } = req.body;
+    const { email, password } = req.body;
 
     // Input validation
-    if (!email || !password || !recaptchaToken) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required',
-      });
-    }
-
-    // Verify reCAPTCHA
-    const isRecaptchaValid = await verifyRecaptcha(recaptchaToken);
-    if (!isRecaptchaValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'reCAPTCHA verification failed',
       });
     }
 
@@ -218,7 +178,7 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     // Generate JWT
     const token = jwt.sign(
       { userId: user._id },
-      JWT_SECRET,
+      process.env.JWT_SECRET || '4360',
       { expiresIn: '24h' }
     );
 
@@ -236,90 +196,6 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     return res.status(500).json({
       success: false,
       message: 'Server error during login',
-    });
-  }
-};
-
-export const sendOTP = async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const { email, recaptchaToken } = req.body;
-
-    // Input validation
-    if (!email || !recaptchaToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and reCAPTCHA token are required',
-      });
-    }
-
-    // Verify reCAPTCHA
-    const isRecaptchaValid = await verifyRecaptcha(recaptchaToken);
-    if (!isRecaptchaValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'reCAPTCHA verification failed',
-      });
-    }
-
-    // Check existing user
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already registered',
-      });
-    }
-
-    // Generate and store OTP
-    const otp = generateOTP();
-    await storeOTP(email, otp);
-
-    // Send OTP email
-    await sendOTPEmail(email, otp);
-
-    return res.json({
-      success: true,
-      message: 'OTP sent successfully',
-    });
-  } catch (error) {
-    console.error('Send OTP error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to send OTP',
-    });
-  }
-};
-
-export const verifyOTPHandler = async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const { email, otp } = req.body;
-
-    // Input validation
-    if (!email || !otp) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and OTP are required',
-      });
-    }
-
-    // Verify OTP
-    const isValid = await verifyOTP(email, otp);
-    if (!isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired OTP',
-      });
-    }
-
-    return res.json({
-      success: true,
-      message: 'OTP verified successfully',
-    });
-  } catch (error) {
-    console.error('OTP verification error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to verify OTP',
     });
   }
 };

@@ -1,8 +1,17 @@
-// backend/src/models/User.ts
-import mongoose from 'mongoose';
+// src/models/User.ts
+import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-const userSchema = new mongoose.Schema({
+// Interface for User document
+export interface IUser extends Document {
+  email: string;
+  password: string;
+  verified: boolean;
+  createdAt: Date;
+  comparePassword(candidatePassword: string): Promise<boolean>;
+}
+
+const userSchema = new Schema<IUser>({
   email: {
     type: String,
     required: true,
@@ -38,6 +47,5 @@ userSchema.methods.comparePassword = async function(candidatePassword: string): 
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model<IUser>('User', userSchema);
 export default User;
-

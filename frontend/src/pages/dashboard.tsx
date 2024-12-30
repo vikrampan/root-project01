@@ -1,12 +1,16 @@
+// src/pages/dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
+import type { GetServerSidePropsContext } from 'next';
 import {
   Settings2, FileSpreadsheet, ChevronDown, Bell, User,
   Settings, LogOut, LineChart, HelpCircle, Lock,
   FileText, Box, Package, Eye, Construction, ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { withAuth } from '@/middleware/authMiddleware';
+import { logout } from '@/utils/auth';
 import General from '@/components/dashboard/General';
 import Tubesheet from '@/components/dashboard/Tubesheet/Tubesheet';
 import { ReportVariables } from '@/components/dashboard/ReportVariables';
@@ -14,9 +18,11 @@ import { Legends } from '@/components/dashboard/Legends';
 import { Preferences } from '@/components/dashboard/Preferences';
 import { License } from '@/components/dashboard/License';
 import { Help } from '@/components/dashboard/Help';
+import { toast } from 'react-hot-toast';
 
 export const dynamic = 'force-dynamic';
 
+// Types and Interfaces
 interface UserSession {
   user?: {
     name?: string;
@@ -24,9 +30,23 @@ interface UserSession {
   };
 }
 
+interface MenuItem {
+  id: string;
+  icon?: any;
+  label: string;
+  color?: string;
+  hasDropdown?: boolean;
+  subItems?: MenuItem[];
+}
+
+interface DashboardProps {
+  token: string;
+}
+
 const WELCOME_SHOWN_KEY = 'welcome_shown';
 
-export default function Dashboard() {
+function Dashboard({ token }: DashboardProps) {
+  // State Management
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
@@ -40,17 +60,7 @@ export default function Dashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInspectionOpen, setIsInspectionOpen] = useState(false);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      setIsHeaderVisible(currentScrollY < lastScrollY || currentScrollY < 50);
-      setLastScrollY(currentScrollY);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY]);
-
+  // Menu Configuration
   const menuItems = {
     main: [
       { id: 'Reporting', icon: FileText, label: 'Reporting', color: 'text-[#FFC857]' },
@@ -86,7 +96,14 @@ export default function Dashboard() {
     ]
   };
 
+  // Effects
   useEffect(() => {
+    // Authentication check
+    if (!token) {
+      router.push('/auth/signin');
+      return;
+    }
+
     if (status === "loading") {
       setIsLoading(true);
       return;
@@ -99,6 +116,7 @@ export default function Dashboard() {
       return;
     }
 
+    // Welcome message initialization
     if (session?.user) {
       const hasShownWelcome = localStorage.getItem(WELCOME_SHOWN_KEY);
       if (!hasShownWelcome) {
@@ -108,13 +126,34 @@ export default function Dashboard() {
         return () => clearTimeout(timer);
       }
     }
-  }, [session, status, router]);
+  }, [session, status, router, token]);
 
+  // Scroll handling
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setIsHeaderVisible(currentScrollY < lastScrollY || currentScrollY < 50);
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
+
+  // Handlers
   const handleLogout = async () => {
-    await signOut({ callbackUrl: '/auth/signin' });
+    try {
+      logout();
+      toast.success('Logged out successfully');
+      await signOut({ callbackUrl: '/auth/signin' });
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Error logging out');
+    }
   };
 
-  const renderMenuItem = (item: any, isSubItem = false) => {
+  // Menu Item Renderer
+  const renderMenuItem = (item: MenuItem, isSubItem = false) => {
     const isActive = activeSection === item.id || activeSubSection === item.id;
     const paddingLeft = isSubItem ? 'pl-8' : 'pl-4';
 
@@ -169,7 +208,7 @@ export default function Dashboard() {
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                {item.subItems.map((subItem: any) => renderMenuItem(subItem, true))}
+                {item.subItems.map((subItem) => renderMenuItem(subItem, true))}
               </motion.ul>
             )}
           </AnimatePresence>
@@ -178,17 +217,7 @@ export default function Dashboard() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#181818]">
-        <div className="relative w-32 h-32">
-          <div className="absolute inset-0 rounded-full border-4 border-[#282828]"></div>
-          <div className="absolute inset-0 rounded-full border-4 border-t-[#FFC857] animate-spin"></div>
-        </div>
-      </div>
-    );
-  }
-
+  // Active Section Renderer
   const renderActiveSection = () => {
     switch (activeSubSection || activeSection) {
       case 'Tubesheet':
@@ -253,47 +282,23 @@ export default function Dashboard() {
           </motion.div>
         );
       default:
-        return (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-b from-[#1E1E1E] to-[#181818] p-8 rounded-xl shadow-lg border border-[#282828]"
-          >
-            <div className="flex flex-col items-center justify-center text-center space-y-6">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                className="w-24 h-24 bg-gradient-to-br from-[#282828] to-[#1E1E1E] rounded-full flex items-center justify-center shadow-xl"
-              >
-                <Construction className="w-12 h-12 text-[#FFC857]" />
-              </motion.div>
-              
-              <div className="space-y-4">
-                <h3 className="text-2xl font-bold text-[#E0E0E0]">
-                  {activeSubSection || activeSection}
-                </h3>
-                <p className="text-[#9A9A9A]">
-                  Our team is working hard to build this feature. Stay tuned!
-                </p>
-              </div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="flex gap-3"
-              >
-                <span className="inline-flex h-3 w-3 animate-bounce rounded-full bg-[#FFC857]"></span>
-                <span className="inline-flex h-3 w-3 animate-bounce rounded-full bg-[#FFC857] [animation-delay:0.2s]"></span>
-                <span className="inline-flex h-3 w-3 animate-bounce rounded-full bg-[#FFC857] [animation-delay:0.4s]"></span>
-              </motion.div>
-            </div>
-          </motion.div>
-        );
+        return null;
     }
   };
 
+  // Loading State
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#181818]">
+        <div className="relative w-32 h-32">
+          <div className="absolute inset-0 rounded-full border-4 border-[#282828]"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-t-[#FFC857] animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main Render
   return (
     <div className="flex min-h-screen bg-[#181818]">
       {/* Sidebar */}
@@ -422,3 +427,12 @@ export default function Dashboard() {
     </div>
   );
 }
+
+/*// Server-side props with authentication
+export const getServerSideProps = withAuth(async (context: GetServerSidePropsContext) => {
+  return {
+    props: {}
+  };
+}); */
+
+export default Dashboard;
